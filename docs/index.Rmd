@@ -1,0 +1,719 @@
+---
+title: "NHS Workforce Statistics"
+author: "Logan Robertson - Senior Analyst"
+output: 
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+    html_notebook:
+      code_folding: hide
+      theme: united
+      toc: yes
+      toc_depth: 3
+      toc_float: yes
+      keep_md: TRUE
+---
+
+
+## Primer
+
+This report looks at the NHS Workforce Statistics from September 2009 to May 
+2022 to ascertain any significant trends/findings.
+
+In order to do this, firstly, the data was graphed and summarised in a table below. Monthly and annual percentage changes are also shown. Loess smoothing (blue curve) was applied to gain insight on data trends. You may switch between job categories by clicking on the relevant tab.
+
+Next, to predict future headcounts by category, SARIMA modelling was used to 
+give two-year forecasts.
+
+Note that this analysis focuses on **total headcount** only. As such, these numbers may not add up to the full time equivalent (FTE) data as an individual may take up more than one role.
+
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE, results='hide'}
+setwd("~/Desktop/R_Workspace")
+library(readxl)
+library(tidyverse)
+library(forecast)
+library(janitor)
+library(mgcv)
+library(fpp2)
+library(dplyr)
+library(knitr)
+library(zoo)
+library(kableExtra)
+library(formattable)
+Workforce_Data <- read_excel("Workforce Data May 2022 CN.xlsx", 
+    sheet = "1. England")
+Workforce_Data <- Workforce_Data %>% select(c(-1)) 
+Workforce_Data <- Workforce_Data[complete.cases(Workforce_Data), ] 
+Workforce_Data <- Workforce_Data[-c(28:54), ]
+Workforce_Data <- rename(Workforce_Data, 'Category'=...2) %>%
+select(-c( ,155:158)) %>%  
+pivot_longer(-Category,names_to='Date',values_to ='Count')
+Workforce_Data <- mutate(Workforce_Data, Date=as.Date(as.numeric(Date),origin = "1899-12-30"))
+Workforce_Data<-mutate(Workforce_Data,Date=as.yearmon(Date))
+
+p_list<-list()
+
+p1<-filter(Workforce_Data, Category=='Total')
+p1<- ggplot(p1,aes(x=Date,y=Count),show.legend=FALSE) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+  facet_wrap(~Category)
+
+p1d<-spread(Workforce_Data,Date,Count)
+p1d<- p1d %>% mutate(`Monthly Change` = percent((p1d$`May 2022`/p1d$`Apr 2022`)-1),`Annual Change` = percent((p1d$`May 2022`/p1d$`May 2021`)-1))
+p1d<- p1d %>% filter(Category=='Total') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F, position='center') %>% scroll_box(width = "100%", height = "140px")
+
+p2<-filter(Workforce_Data, Category=='Midwives')
+p2<- ggplot(p2,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p2d<-spread(Workforce_Data,Date,Count)
+p2d<- p2d %>% mutate(`Monthly Change` = percent((p2d$`May 2022`/p2d$`Apr 2022`)-1),`Annual Change` = percent((p2d$`May 2022`/p2d$`May 2021`)-1))
+p2d<- p2d %>% filter(Category=='Midwives') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+
+
+p3<-filter(Workforce_Data, Category=='Consultant')
+p3<-ggplot(p3,aes(x=Date,y=Count))+ geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p3d<-spread(Workforce_Data,Date,Count)
+p3d<- p3d %>% mutate(`Monthly Change` = percent((p3d$`May 2022`/p3d$`Apr 2022`)-1),`Annual Change` = percent((p3d$`May 2022`/p3d$`May 2021`)-1))
+p3d<- p3d %>% filter(Category=='Consultant') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p4<-filter(Workforce_Data, Category=='Senior managers')
+p4<- ggplot(p4,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p4d<-spread(Workforce_Data,Date,Count)
+p4d<- p4d %>% mutate(`Monthly Change` = percent((p4d$`May 2022`/p4d$`Apr 2022`)-1),`Annual Change` = percent((p4d$`May 2022`/p4d$`May 2021`)-1))
+p4d<- p4d %>% filter(Category=='Senior managers') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p5<-filter(Workforce_Data, Category=='Managers')
+p5<- ggplot(p5,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p5d<-spread(Workforce_Data,Date,Count)
+p5d<- p5d %>% mutate(`Monthly Change` = percent((p5d$`May 2022`/p5d$`Apr 2022`)-1),`Annual Change` = percent((p5d$`May 2022`/p5d$`May 2021`)-1))
+p5d<- p5d %>% filter(Category=='Managers') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p6<-filter(Workforce_Data, Category=='Ambulance staff')
+p6<- ggplot(p6,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p6d<-spread(Workforce_Data,Date,Count)
+p6d<- p6d %>% mutate(`Monthly Change` = percent((p6d$`May 2022`/p6d$`Apr 2022`)-1),`Annual Change` = percent((p6d$`May 2022`/p6d$`May 2021`)-1))
+p6d<- p6d %>% filter(Category=='Ambulance staff') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p7<-filter(Workforce_Data, Category=='Nurses & health visitors')
+p7<- ggplot(p7,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p7d<-spread(Workforce_Data,Date,Count)
+p7d<- p7d %>% mutate(`Monthly Change` = percent((p7d$`May 2022`/p7d$`Apr 2022`)-1),`Annual Change` = percent((p7d$`May 2022`/p7d$`May 2021`)-1))
+p7d<- p7d %>% filter(Category=='Nurses & health visitors') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p8<-filter(Workforce_Data, Category=='NHS infrastructure support')
+p8<- ggplot(p8,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p8d<-spread(Workforce_Data,Date,Count)
+p8d<- p8d %>% mutate(`Monthly Change` = percent((p8d$`May 2022`/p8d$`Apr 2022`)-1),`Annual Change` = percent((p8d$`May 2022`/p8d$`May 2021`)-1))
+p8d<- p8d %>% filter(Category=='NHS infrastructure support') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p9<-filter(Workforce_Data, Category=='Central functions')
+p9<- ggplot(p9,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p9d<-spread(Workforce_Data,Date,Count)
+p9d<- p9d %>% mutate(`Monthly Change` = percent((p9d$`May 2022`/p9d$`Apr 2022`)-1),`Annual Change` = percent((p9d$`May 2022`/p9d$`May 2021`)-1))
+p9d<- p9d %>% filter(Category=='Central functions') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p10<-filter(Workforce_Data, Category=='Core Training')
+p10<- ggplot(p10,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p10d<-spread(Workforce_Data,Date,Count)
+p10d<- p10d %>% mutate(`Monthly Change` = percent((p10d$`May 2022`/p10d$`Apr 2022`)-1),`Annual Change` = percent((p10d$`May 2022`/p10d$`May 2021`)-1))
+p10d<- p10d %>% filter(Category=='Core Training') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p11<-filter(Workforce_Data, Category=='Foundation Doctor Year 1')
+p11<- ggplot(p11,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p11d<-spread(Workforce_Data,Date,Count)
+p11d<- p11d %>% mutate(`Monthly Change` = percent((p11d$`May 2022`/p11d$`Apr 2022`)-1),`Annual Change` = percent((p11d$`May 2022`/p11d$`May 2021`)-1))
+p11d<- p11d %>% filter(Category=='Foundation Doctor Year 1') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+
+p12<-filter(Workforce_Data, Category=='Foundation Doctor Year 2')
+p12<- ggplot(p12,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p12d<-spread(Workforce_Data,Date,Count)
+p12d<- p12d %>% mutate(`Monthly Change` = percent((p12d$`May 2022`/p12d$`Apr 2022`)-1),`Annual Change` = percent((p12d$`May 2022`/p12d$`May 2021`)-1))
+p12d<- p12d %>% filter(Category=='Foundation Doctor Year 2') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p13<-filter(Workforce_Data, Category=='HCHS doctors')
+p13<- ggplot(p13,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p13d<-spread(Workforce_Data,Date,Count)
+p13d<- p13d %>% mutate(`Monthly Change` = percent((p13d$`May 2022`/p13d$`Apr 2022`)-1),`Annual Change` = percent((p13d$`May 2022`/p13d$`May 2021`)-1))
+p13d<- p13d %>% filter(Category=='HCHS doctors') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p14<-filter(Workforce_Data, Category=='Support to ambulance staff')
+p14<- ggplot(p14,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p14d<-spread(Workforce_Data,Date,Count)
+p14d<- p14d %>% mutate(`Monthly Change` = percent((p14d$`May 2022`/p14d$`Apr 2022`)-1),`Annual Change` = percent((p14d$`May 2022`/p14d$`May 2021`)-1))
+p14d<- p14d %>% filter(Category=='Support to ambulance staff') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+
+p15<-filter(Workforce_Data, Category=='Support to doctors, nurses & midwives')
+p15<- ggplot(p15,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p15d<-spread(Workforce_Data,Date,Count)
+p15d<- p15d %>% mutate(`Monthly Change` = percent((p15d$`May 2022`/p15d$`Apr 2022`)-1),`Annual Change` = percent((p15d$`May 2022`/p15d$`May 2021`)-1))
+p15d<- p15d %>% filter(Category=='Support to doctors, nurses & midwives') %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+p16<-filter(Workforce_Data, Category=='Support to clinical staff')
+p16<- ggplot(p16,aes(x=Date,y=Count)) + geom_line(colour='red') +
+  theme_bw() + 
+  geom_smooth(span=0.3,size=0.5,colour='Blue')+
+  labs(y='Workforce Count',x='Date')+
+    facet_wrap(~Category)
+
+p16d<-spread(Workforce_Data,Date,Count)
+p16d<- p16d %>% mutate(`Monthly Change` = percent((p16d$`May 2022`/p16d$`Apr 2022`)-1),`Annual Change` = percent((p16d$`May 2022`/p16d$`May 2021`)-1))
+p16d<- p16d %>% filter(Category=='Support to clinical staff')  %>% kbl(longtable=T) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "140px")
+
+
+p_list[[1]]<-list(p1,'Total',p1d)
+p_list[[2]]<-list(p2,"Midwives",p2d)
+p_list[[3]]<-list(p3,"Consultant",p3d)
+p_list[[4]]<-list(p4,"Senior Managers",p4d)
+p_list[[5]]<-list(p5,"Managers",p5d)
+p_list[[6]]<-list(p6,"Ambulance Staff",p6d)
+p_list[[7]]<-list(p7,"Nurses & Health Visitors",p7d)
+p_list[[8]]<-list(p8,"NHS Infrastructure Support",p8d)
+p_list[[9]]<-list(p9,"Central Functions",p9d)
+p_list[[10]]<-list(p10,"Core Training",p10d)
+p_list[[11]]<-list(p11,"Foundation Doctor Year 1",p11d)
+p_list[[12]]<-list(p12,"Foundation Doctor Year 2",p12d)
+p_list[[13]]<-list(p13,"HCHS Doctors",p13d)
+p_list[[14]]<-list(p14,"Support to Ambulance Staff",p14d)
+p_list[[15]]<-list(p15,"Support to Doctors, Nurses & Midwives",p15d)
+p_list[[16]]<-list(p16,"Support to Clinical Staff",p16d)
+
+
+```
+	
+### Plots of Headcount by Selected Categories {.tabset}
+```{r, results='asis',echo= FALSE, message=FALSE}
+for(i in seq_along(p_list)){
+  tmp<-p_list[[i]]
+  cat("####",tmp[[2]]," \n")
+  print(tmp[1])
+  print(tmp[3])
+  cat(' \n\n')
+}
+```
+
+### Summary
+
+* Total headcount for the NHS has increased consistently over the years with a
+2.3% annual increase compared to May 2021.
+
+* All categories analysed except Midwives have seen their annual headcounts
+increase. Midwives have seen a 2.1% annual decrease compared to May 2021
+and is projected to decrease further (see lowess above and SARIMA below).
+
+* Certain categories are cyclical/seasonal in nature, with Midwives and Year 1 
+Foundation Doctors strong examples of this.
+
+* A significant decrease in headcount occurs around 2013 which affects certain categories more significantly than others. Research indicates that approximately 7000 key staff were made redundant during this time: https://www.theguardian.com/society/2013/dec/31/nhs-staff-laid-off-amid-savings-drive
+
+* Also, very significant drops in headcount to Year 2 Foundation Doctors and Ambulance Staff occur in 2018 and 2019 respectively.
+
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE, results='hide'}
+
+s_list<-list()
+
+tsdata1<-filter(Workforce_Data,Category=='Total')
+tsdata1<-ts(tsdata1$Count,frequency=12,start=c(2009,09))
+AS<-auto.arima(tsdata1)
+F1<-forecast(AS, h=25)
+TS1<-autoplot(F1) +  theme_bw()
+
+
+T1<-cbind(time(F1$mean),F1$mean)
+colnames(T1)=c('Date','Forecast')
+T1<-as_tibble(T1)
+T1<-mutate(T1,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T1<-t(T1)
+T1<-row_to_names(T1,row_number = 1)
+T1<-as_tibble(T1)
+T1<-mutate(T1,`1-Year Forecast Proportion Change`=percent(as.numeric(T1$`Jun 2023`)/as.numeric(T1$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T1$`Jun 2024`)/as.numeric(T1$`Jun 2022`)-1))
+rownames(T1)<-c('Forecast')
+T1<-T1 %>% kbl(format="html") %>% kable_styling(bootstrap_options = "striped",fixed_thead = T, full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A1<-accuracy(F1)
+A1<-as_tibble(A1)
+A1<-round(A1,digits=3)
+A1<- A1 %>% kbl() %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata2<-filter(Workforce_Data,Category=='Midwives')
+tsdata2<-ts(tsdata2$Count,frequency=12,start=c(2009,09))
+AS2<-auto.arima(tsdata2)
+F2<-forecast(AS2, h=25)
+TS2<-autoplot(F2) +  theme_bw()
+
+
+T2<-cbind(time(F2$mean),F2$mean)
+colnames(T2)=c('Date','Forecast')
+T2<-as_tibble(T2)
+T2<-mutate(T2,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T2<-t(T2)
+T2<-row_to_names(T2,row_number = 1)
+T2<-as_tibble(T2)
+T2<-mutate(T2,`1-Year Forecast Proportion Change`=percent(as.numeric(T2$`Jun 2023`)/as.numeric(T2$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T2$`Jun 2024`)/as.numeric(T2$`Jun 2022`)-1))
+rownames(T2)<-c('Forecast')
+T2<-T2 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A2<-accuracy(F2)
+A2<-as_tibble(A2)
+A2<-round(A2,digits=3)
+A2<- A2 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata3<-filter(Workforce_Data,Category=='Consultant')
+tsdata3<-ts(tsdata3$Count,frequency=12,start=c(2009,09))
+AS3<-auto.arima(tsdata3)
+F3<-forecast(AS3, h=25)
+TS3<-autoplot(F3) +  theme_bw()
+
+
+T3<-cbind(time(F3$mean),F3$mean)
+colnames(T3)=c('Date','Forecast')
+T3<-as_tibble(T3)
+T3<-mutate(T3,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T3<-t(T3)
+T3<-row_to_names(T3,row_number = 1)
+T3<-as_tibble(T3)
+T3<-mutate(T3,`1-Year Forecast Proportion Change`=percent(as.numeric(T3$`Jun 2023`)/as.numeric(T3$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T3$`Jun 2024`)/as.numeric(T3$`Jun 2022`)-1))
+rownames(T3)<-c('Forecast')
+T3<-T3 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A3<-accuracy(F3)
+A3<-as_tibble(A3)
+A3<-round(A3,digits=3)
+A3<- A3 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata4<-filter(Workforce_Data,Category=='Senior managers')
+tsdata4<-ts(tsdata4$Count,frequency=12,start=c(2009,09))
+AS4<-auto.arima(tsdata4)
+F4<-forecast(AS4, h=25)
+TS4<-autoplot(F4) +  theme_bw()
+
+
+T4<-cbind(time(F4$mean),F4$mean)
+colnames(T4)=c('Date','Forecast')
+T4<-as_tibble(T4)
+T4<-mutate(T4,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T4<-t(T4)
+T4<-row_to_names(T4,row_number = 1)
+T4<-as_tibble(T4)
+T4<-mutate(T4,`1-Year Forecast Proportion Change`=percent(as.numeric(T4$`Jun 2023`)/as.numeric(T4$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T4$`Jun 2024`)/as.numeric(T4$`Jun 2022`)-1))
+rownames(T4)<-c('Forecast')
+T4<-T4 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A4<-accuracy(F4)
+A4<-as_tibble(A4)
+A4<-round(A4,digits=3)
+A4<- A4 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata5<-filter(Workforce_Data,Category=='Managers')
+tsdata5<-ts(tsdata5$Count,frequency=12,start=c(2009,09))
+AS5<-auto.arima(tsdata5)
+F5<-forecast(AS5, h=25)
+TS5<-autoplot(F5) +  theme_bw()
+
+
+T5<-cbind(time(F5$mean),F5$mean)
+colnames(T5)=c('Date','Forecast')
+T5<-as_tibble(T5)
+T5<-mutate(T5,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T5<-t(T5)
+T5<-row_to_names(T5,row_number = 1)
+T5<-as_tibble(T5)
+T5<-mutate(T5,`1-Year Forecast Proportion Change`=percent(as.numeric(T5$`Jun 2023`)/as.numeric(T5$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T5$`Jun 2024`)/as.numeric(T5$`Jun 2022`)-1))
+rownames(T5)<-c('Forecast')
+T5<-T5 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A5<-accuracy(F5)
+A5<-as_tibble(A5)
+A5<-round(A5,digits=3)
+A5<- A5 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata6<-filter(Workforce_Data,Category=='Ambulance staff')
+tsdata6<-ts(tsdata6$Count,frequency=12,start=c(2009,09))
+AS6<-auto.arima(tsdata6)
+F6<-forecast(AS6, h=25)
+TS6<-autoplot(F6) +  theme_bw()
+
+
+T6<-cbind(time(F6$mean),F6$mean)
+colnames(T6)=c('Date','Forecast')
+T6<-as_tibble(T6)
+T6<-mutate(T6,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T6<-t(T6)
+T6<-row_to_names(T6,row_number = 1)
+T6<-as_tibble(T6)
+T6<-mutate(T6,`1-Year Forecast Proportion Change`=percent(as.numeric(T6$`Jun 2023`)/as.numeric(T6$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T6$`Jun 2024`)/as.numeric(T6$`Jun 2022`)-1))
+rownames(T6)<-c('Forecast')
+T6<-T6 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A6<-accuracy(F6)
+A6<-as_tibble(A6)
+A6<-round(A6,digits=3)
+A6<- A6 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata7<-filter(Workforce_Data,Category=='Nurses & health visitors')
+tsdata7<-ts(tsdata7$Count,frequency=12,start=c(2009,09))
+AS7<-auto.arima(tsdata7)
+F7<-forecast(AS7, h=25)
+TS7<-autoplot(F7) +  theme_bw()
+
+
+T7<-cbind(time(F7$mean),F7$mean)
+colnames(T7)=c('Date','Forecast')
+T7<-as_tibble(T7)
+T7<-mutate(T7,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T7<-t(T7)
+T7<-row_to_names(T7,row_number = 1)
+T7<-as_tibble(T7)
+T7<-mutate(T7,`1-Year Forecast Proportion Change`=percent(as.numeric(T7$`Jun 2023`)/as.numeric(T7$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T7$`Jun 2024`)/as.numeric(T7$`Jun 2022`)-1))
+rownames(T7)<-c('Forecast')
+T7<-T7 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A7<-accuracy(F7)
+A7<-as_tibble(A7)
+A7<-round(A7,digits=3)
+A7<- A7 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata8<-filter(Workforce_Data,Category=='NHS infrastructure support')
+tsdata8<-ts(tsdata8$Count,frequency=12,start=c(2009,09))
+AS8<-auto.arima(tsdata8)
+F8<-forecast(AS8, h=25)
+TS8<-autoplot(F8) +  theme_bw()
+
+
+T8<-cbind(time(F8$mean),F8$mean)
+colnames(T8)=c('Date','Forecast')
+T8<-as_tibble(T8)
+T8<-mutate(T8,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T8<-t(T8)
+T8<-row_to_names(T8,row_number = 1)
+T8<-as_tibble(T8)
+T8<-mutate(T8,`1-Year Forecast Proportion Change`=percent(as.numeric(T8$`Jun 2023`)/as.numeric(T8$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T8$`Jun 2024`)/as.numeric(T8$`Jun 2022`)-1))
+rownames(T8)<-c('Forecast')
+T8<-T8 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A8<-accuracy(F8)
+A8<-as_tibble(A8)
+A8<-round(A8,digits=3)
+A8<- A8 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata9<-filter(Workforce_Data,Category=='Central functions')
+tsdata9<-ts(tsdata9$Count,frequency=12,start=c(2009,09))
+AS9<-auto.arima(tsdata9)
+F9<-forecast(AS9, h=25)
+TS9<-autoplot(F9) +  theme_bw()
+
+
+T9<-cbind(time(F9$mean),F9$mean)
+colnames(T9)=c('Date','Forecast')
+T9<-as_tibble(T9)
+T9<-mutate(T9,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T9<-t(T9)
+T9<-row_to_names(T9,row_number = 1)
+T9<-as_tibble(T9)
+T9<-mutate(T9,`1-Year Forecast Proportion Change`=percent(as.numeric(T9$`Jun 2023`)/as.numeric(T9$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T9$`Jun 2024`)/as.numeric(T9$`Jun 2022`)-1))
+rownames(T9)<-c('Forecast')
+T9<-T9 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A9<-accuracy(F9)
+A9<-as_tibble(A9)
+A9<-round(A9,digits=3)
+A9<- A9 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata10<-filter(Workforce_Data,Category=='Core Training')
+tsdata10<-ts(tsdata10$Count,frequency=12,start=c(2009,09))
+AS10<-auto.arima(tsdata10)
+F10<-forecast(AS10, h=25)
+TS10<-autoplot(F10) +  theme_bw()
+
+
+T10<-cbind(time(F10$mean),F10$mean)
+colnames(T10)=c('Date','Forecast')
+T10<-as_tibble(T10)
+T10<-mutate(T10,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T10<-t(T10)
+T10<-row_to_names(T10,row_number = 1)
+T10<-as_tibble(T10)
+T10<-mutate(T10,`1-Year Forecast Proportion Change`=percent(as.numeric(T10$`Jun 2023`)/as.numeric(T10$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T10$`Jun 2024`)/as.numeric(T10$`Jun 2022`)-1))
+rownames(T10)<-c('Forecast')
+T10<-T10 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A10<-accuracy(F10)
+A10<-as_tibble(A10)
+A10<-round(A10,digits=3)
+A10<- A10 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata11<-filter(Workforce_Data,Category=='Foundation Doctor Year 1')
+tsdata11<-ts(tsdata11$Count,frequency=12,start=c(2009,09))
+AS11<-auto.arima(tsdata11)
+F11<-forecast(AS11, h=25)
+TS11<-autoplot(F11) +  theme_bw()
+
+
+T11<-cbind(time(F11$mean),F11$mean)
+colnames(T11)=c('Date','Forecast')
+T11<-as_tibble(T11)
+T11<-mutate(T11,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T11<-t(T11)
+T11<-row_to_names(T11,row_number = 1)
+T11<-as_tibble(T11)
+T11<-mutate(T11,`1-Year Forecast Proportion Change`=percent(as.numeric(T11$`Jun 2023`)/as.numeric(T11$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T11$`Jun 2024`)/as.numeric(T11$`Jun 2022`)-1))
+rownames(T11)<-c('Forecast')
+T11<-T11 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A11<-accuracy(F11)
+A11<-as_tibble(A11)
+A11<-round(A11,digits=3)
+A11<- A11 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata12<-filter(Workforce_Data,Category=='Foundation Doctor Year 2')
+tsdata12<-ts(tsdata12$Count,frequency=12,start=c(2009,09))
+AS12<-auto.arima(tsdata12)
+F12<-forecast(AS12, h=25)
+TS12<-autoplot(F12) +  theme_bw()
+
+
+T12<-cbind(time(F12$mean),F12$mean)
+colnames(T12)=c('Date','Forecast')
+T12<-as_tibble(T12)
+T12<-mutate(T12,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T12<-t(T12)
+T12<-row_to_names(T12,row_number = 1)
+T12<-as_tibble(T12)
+T12<-mutate(T12,`1-Year Forecast Proportion Change`=percent(as.numeric(T12$`Jun 2023`)/as.numeric(T12$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T12$`Jun 2024`)/as.numeric(T12$`Jun 2022`)-1))
+rownames(T12)<-c('Forecast')
+T12<-T12 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A12<-accuracy(F12)
+A12<-as_tibble(A12)
+A12<-round(A12,digits=3)
+A12<- A12 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata13<-filter(Workforce_Data,Category=='HCHS doctors')
+tsdata13<-ts(tsdata13$Count,frequency=12,start=c(2009,09))
+AS13<-auto.arima(tsdata13)
+F13<-forecast(AS13, h=25)
+TS13<-autoplot(F13) +  theme_bw()
+
+
+T13<-cbind(time(F13$mean),F13$mean)
+colnames(T13)=c('Date','Forecast')
+T13<-as_tibble(T13)
+T13<-mutate(T13,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T13<-t(T13)
+T13<-row_to_names(T13,row_number = 1)
+T13<-as_tibble(T13)
+T13<-mutate(T13,`1-Year Forecast Proportion Change`=percent(as.numeric(T13$`Jun 2023`)/as.numeric(T13$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T13$`Jun 2024`)/as.numeric(T13$`Jun 2022`)-1))
+rownames(T13)<-c('Forecast')
+T13<-T13 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A13<-accuracy(F13)
+A13<-as_tibble(A13)
+A13<-round(A13,digits=3)
+A13<- A13 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata14<-filter(Workforce_Data,Category=='Support to ambulance staff')
+tsdata14<-ts(tsdata14$Count,frequency=12,start=c(2009,09))
+AS14<-auto.arima(tsdata14)
+F14<-forecast(AS14, h=25)
+TS14<-autoplot(F14) +  theme_bw()
+
+
+T14<-cbind(time(F14$mean),F14$mean)
+colnames(T14)=c('Date','Forecast')
+T14<-as_tibble(T14)
+T14<-mutate(T14,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T14<-t(T14)
+T14<-row_to_names(T14,row_number = 1)
+T14<-as_tibble(T14)
+T14<-mutate(T14,`1-Year Forecast Proportion Change`=percent(as.numeric(T14$`Jun 2023`)/as.numeric(T14$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T14$`Jun 2024`)/as.numeric(T14$`Jun 2022`)-1))
+rownames(T14)<-c('Forecast')
+T14<-T14 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A14<-accuracy(F14)
+A14<-as_tibble(A14)
+A14<-round(A14,digits=3)
+A14<- A14 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata15<-filter(Workforce_Data,Category=='Support to doctors, nurses & midwives')
+tsdata15<-ts(tsdata15$Count,frequency=12,start=c(2009,09))
+AS15<-auto.arima(tsdata15)
+F15<-forecast(AS15, h=25)
+TS15<-autoplot(F15) +  theme_bw()
+
+
+T15<-cbind(time(F15$mean),F15$mean)
+colnames(T15)=c('Date','Forecast')
+T15<-as_tibble(T15)
+T15<-mutate(T15,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T15<-t(T15)
+T15<-row_to_names(T15,row_number = 1)
+T15<-as_tibble(T15)
+T15<-mutate(T15,`1-Year Forecast Proportion Change`=percent(as.numeric(T15$`Jun 2023`)/as.numeric(T15$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T15$`Jun 2024`)/as.numeric(T15$`Jun 2022`)-1))
+rownames(T15)<-c('Forecast')
+T15<-T15 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A15<-accuracy(F15)
+A15<-as_tibble(A15)
+A15<-round(A15,digits=3)
+A15<- A15 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+tsdata16<-filter(Workforce_Data,Category=='Support to clinical staff')
+tsdata16<-ts(tsdata16$Count,frequency=12,start=c(2009,09))
+AS16<-auto.arima(tsdata16)
+F16<-forecast(AS16, h=25)
+TS16<-autoplot(F16) +  theme_bw()
+
+
+T16<-cbind(time(F16$mean),F16$mean)
+colnames(T16)=c('Date','Forecast')
+T16<-as_tibble(T16)
+T16<-mutate(T16,Date=as.yearmon(Date),`Forecast`=round(`Forecast`,digits=0))
+T16<-t(T16)
+T16<-row_to_names(T16,row_number = 1)
+T16<-as_tibble(T16)
+T16<-mutate(T16,`1-Year Forecast Proportion Change`=percent(as.numeric(T16$`Jun 2023`)/as.numeric(T16$`Jun 2022`)-1),`2-Year Forecast Proportion Change`=percent(as.numeric(T16$`Jun 2024`)/as.numeric(T16$`Jun 2022`)-1))
+rownames(T16)<-c('Forecast')
+T16<-T16 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F) %>% scroll_box(width = "100%", height = "150px")
+
+A16<-accuracy(F16)
+A16<-as_tibble(A16)
+A16<-round(A16,digits=3)
+A16<- A16 %>% kbl(longtable=T,nsmall=0) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+
+
+
+
+
+
+
+
+
+
+s_list[[1]]<-list(TS1,'Total',T1,A1)
+s_list[[2]]<-list(TS2,'Midwives',T2,A2)
+s_list[[3]]<-list(TS3,'Consultant',T3,A3)
+s_list[[4]]<-list(TS4,'Senior Managers',T4,A4)
+s_list[[5]]<-list(TS5,'Managers',T5,A5)
+s_list[[6]]<-list(TS6,'Ambulance Staff',T6,A6)
+s_list[[7]]<-list(TS7,'Nurses & Health Visitors',T7,A7)
+s_list[[8]]<-list(TS8,'NHS Infrastructure Support',T8,A8)
+s_list[[9]]<-list(TS9,'Central Functions',T9,A9)
+s_list[[10]]<-list(TS10,'Core Training',T10,A10)
+s_list[[11]]<-list(TS11,'Foundation Doctor Year 1',T11,A11)
+s_list[[12]]<-list(TS12,'Foundation Doctor Year 2',T12,A12)
+s_list[[13]]<-list(TS13,'HCAS Doctors',T13,A13)
+s_list[[14]]<-list(TS14,'Support to Ambulance Staff',T14,A14)
+s_list[[15]]<-list(TS15,'Support to Doctors, Nurses & Midwives',T15,A15)
+s_list[[16]]<-list(TS16,'Support to Clinical Staff',T16,A16)
+
+```
+
+
+### Plots of (S)ARIMA by Selected Categories {.tabset}
+
+```{r, results='asis',echo= FALSE, message=FALSE}
+for(i in seq_along(s_list)){
+  smp<-s_list[[i]]
+  cat("####",smp[[2]]," \n")
+  print(smp[1])
+  print(smp[3])
+  print(smp[4])
+
+  cat(' \n\n')
+}
+```
+
+### Summary
+
+* Finalised SARIMA models above vary by category. The Hyndman-Khandakar algorithm is implemented to find the model with the lowest **Akaike Information Criterion (AIC)** which is iterated until convergence.
+
+* Some SARIMA models fare better than others. The main distinction where the models perform poorly is taking into account discontinuous jumps (e.g. 2013 Senior Managers, 2019 Ambulance Staff). Future analysis conducted would be to build a bespoke model to better understand this issue. 
+
+* Where seasonality is present (Midwives, Core Training), the model is 'generally' more sure of its forecast.
+
+* Total headcount is projected to increase by 1.5% to June 2023 and 3.4% to June 2024. This is unlikely to occur due to the recruitment freeze and uncertainty regarding job cuts which is set to occur in 2023. Future analysis conducted would build this into future models (e.g. integrated proportional decreases using known information (30-40% decrease: https://www.nhsprocurement.org.uk/news/6000-plus-jobs-be-cut-new-nhs-england), building model scenarios) to better understand this issue.
+
+* Midwives trend continues to decrease with a forcasted 1.0% decrease relative to June 2023 and a 2.4% decrease relative to June 2024.
+
+* There are many indicators/ideas of what constitutes 'good model performance'. One such metric is called the **Mean Absolute Error (MAE)**. This is the aggregated mean of the sum of non-negative differences between actual and forecasted values. The smaller this is the better the fit (relative to the scale). 
+
+* Another metric is called the **Mean Absolute Prediction Error (MAPE)**. Generally speaking, a MAPE of less than 0.25 indicates a good fit. Total headcount, Midwives, Consultants, and Nurses & Health Visitors fit this criteria. HCAS Doctors falls just outside (0.26). 
+
+$$\\[0.5in]$$
